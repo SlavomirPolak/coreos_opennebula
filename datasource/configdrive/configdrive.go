@@ -5,6 +5,7 @@ import (
 	"os"
 	"log"
 	"io/ioutil"
+	b64 "encoding/base64"
 	
 	"github.com/SlavomirPolak/bashParser/src/bashParser"
 	//"github.com/coreos/coreos-cloudinit/datasource"
@@ -23,7 +24,7 @@ type configDrive struct {
 }
 
 func NewDatasource(root string) *configDrive {
-	variablesMap, err := bashParser.UseShlex(root + "testFile.sh")
+	variablesMap, err := bashParser.UseShlex(root + "context.sh")
 	if err != nil {
 		log.Printf("Error during parsing script file.\n")
 	}
@@ -62,7 +63,15 @@ func (cd *configDrive) FetchMetadata() ([]byte, error) {
 	} else if cd.variablesMap["PUBLIC_SSH_KEY"] != "" {
 		val = cd.variablesMap["PUBLIC_SSH_KEY"]
 	}
+	
 	if val != "" {
+		/*if cd.variablesMap["USERDATA_ENCODING"] == "base64" {
+			var err error
+			val, err = decodeBase64(val)
+			if err != nil {
+				return nil, err
+			}
+		}*/
 		metadata.SSH_KEY = []byte(val)
 	} else {
 		log.Printf("Variable USER_DATA isnt in script file.\n")
@@ -79,8 +88,17 @@ func (cd *configDrive) FetchUserdata() ([]byte, error) {
 		log.Printf("Variable USER_DATA isnt in script file.\n")
 		return nil, cd.err
 	}
-	ret := cd.variablesMap["USER_DATA"]
-	return []byte(ret), cd.err
+	userData := cd.variablesMap["USER_DATA"]
+	
+	if cd.variablesMap["USERDATA_ENCODING"] == "base64" {
+		var err error
+		userData, err = decodeBase64(userData)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	return []byte(userData), cd.err
 }
 
 func NewVariablesMap(fileName string) (map[string]string, error) {
@@ -93,9 +111,18 @@ func NewVariablesMap(fileName string) (map[string]string, error) {
 	return variablesMap, nil
 }
 
+func decodeBase64(text string) (string, error) {
+	decodedText, err := b64.StdEncoding.DecodeString(text)
+	if err != nil {
+		log.Printf("Error during decoding from base64.\n")
+	}
+	return string(decodedText), err
+}
+
 func main() {
-	ds := NewDatasource("/home/wolfik/gocode/src/bashParser/data/")
+	ds := NewDatasource("/home/wolfik/gocode/src/coreos_opennebula/data/")
 	userData, err := ds.FetchUserdata()
-	
-	fmt.Println(userData, err)
+	data, err := ds.FetchMetadata()
+	fmt.Println(string(data), err)
+	fmt.Println(string(userData), err)
 }
